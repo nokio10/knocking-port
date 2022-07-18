@@ -1,0 +1,249 @@
+- hosts: inetRouter2
+  become: true
+  tasks:
+  - name: install iptables
+    yum:
+      name:
+      - iptables
+      - iptables-services
+      state: present
+      update_cache: true
+
+  - name: copy iptables2 config
+    template:
+      src: iptables2
+      dest: /etc/sysconfig/iptables
+      owner: root
+      group: root
+      mode: 0600
+
+  - name: start and enable iptables service
+    service:
+      name: iptables
+      state: restarted
+      enabled: true
+
+  - name: set up route on inetRouter eth1
+    template:
+      src: inetRouter2_route_eth1.j2
+      dest: /etc/sysconfig/network-scripts/route-eth1
+      owner: root
+      group: root
+      mode: 0644
+
+- hosts: inetRouter
+  become: true
+  tasks:
+  - name: install iptables
+    yum:
+      name:
+      - iptables
+      - iptables-services
+      state: present
+      update_cache: true
+
+  - name: start and enable iptables service
+    service:
+      name: iptables
+      state: restarted
+      enabled: true
+
+  - name: set up route on inetRouter eth1
+    template:
+      src: inetRouter_route_eth1.j2
+      dest: /etc/sysconfig/network-scripts/route-eth1
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: copy iptables config
+    template:
+      src: iptables
+      dest: /etc/sysconfig/iptables
+      owner: root
+      group: root
+      mode: 0600
+
+- hosts: inetRouter, centralRouter, office1Router, office2Router, inetRouter2
+  become: true
+  tasks:
+  - name: set up forward packages across routers
+    sysctl:
+      name: net.ipv4.conf.all.forwarding
+      value: '1'
+      state: present
+
+- hosts: office1Server, office2Server, centralServer
+  become: true
+  tasks:
+  - name: install nettools
+    yum:
+      name:
+      - mtr
+      - traceroute
+      state: present
+      update_cache: true
+    when: ansible_distribution == 'CentOS'
+
+  - name: install nettools
+    apt:
+      name:
+      - mtr
+      - traceroute
+      state: present
+      update_cache: true
+    when: ansible_distribution == 'Ubuntu' or ansible_distribution == 'Debian'
+
+- hosts: centralRouter, centralServer
+  become: true
+  tasks:
+  - name: Set DEFROUTE
+    lineinfile:
+      dest: /etc/sysconfig/network-scripts/ifcfg-eth0
+      regexp: '.*DEFROUTE.*'
+      line: 'DEFROUTE=no'
+      state: present  
+
+- hosts: centralRouter
+  become: true
+  tasks:
+  - name: install nmap
+    yum:
+      name: nmap
+      state: present
+      update_cache: true
+
+  - name: add default gateway for centralRouter
+    lineinfile:
+      dest: /etc/sysconfig/network-scripts/ifcfg-eth1
+      line: GATEWAY=192.168.255.1
+
+  - name: restart network
+    systemd:
+      name: network
+      enabled: yes
+      state: restarted  
+
+  - name: Copy knocknkock
+    template:
+      src: knocknkock.sh.j2
+      dest: /home/vagrant/knocknkock.sh
+      owner: root
+      group: root
+      mode: 0777
+
+- hosts: centralServer
+  become: true
+  tasks:
+  - name: add default gateway for centralServer
+    lineinfile:
+      dest: /etc/sysconfig/network-scripts/ifcfg-eth1
+      line: GATEWAY=192.168.0.1
+
+  - name: install nginx
+    yum:
+      name: https://nginx.org/packages/mainline/centos/7/x86_64/RPMS/nginx-1.21.6-1.el7.ngx.x86_64.rpm
+      state: present
+      update_cache: true
+
+  - name: restart nginx
+    systemd:
+      name: nginx
+      enabled: yes
+      state: restarted
+
+  - name: restart network
+    systemd:
+      name: network
+      enabled: yes
+      state: restarted  
+      
+
+- hosts: office1Server
+  become: true
+  tasks:
+  - name: set up route on office1Server
+    template:
+      src: office1Server_route.j2
+      dest: /etc/netplan/50-vagrant.yaml
+      owner: root
+      group: root
+      mode: 0644
+
+- hosts: office1Router
+  become: true
+  tasks:
+  - name: set up route on office1Router
+    template:
+      src: office1Router_route.j2
+      dest: /etc/netplan/50-vagrant.yaml
+      owner: root
+      group: root
+      mode: 0644
+
+- hosts: office2Server
+  become: true
+  tasks:
+  - name: set up route on office2Server
+    template:
+      src: office2Server_route.j2
+      dest: /etc/network/interfaces
+      owner: root
+      group: root
+      mode: 0644
+
+
+- hosts: office2Router
+  become: true
+  tasks:
+  - name: set up route on office2Router
+    template:
+      src: office2Router_route.j2
+      dest: /etc/network/interfaces
+      owner: root
+      group: root
+      mode: 0644
+
+
+- hosts: centralRouter
+  become: true
+  tasks:
+  - name: set up route on centralRouter eth1
+    template:
+      src: centralRouter_route_eth1.j2
+      dest: /etc/sysconfig/network-scripts/route-eth1
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: set up route on centralRouter eth5
+    template:
+      src: centralRouter_route_eth5.j2
+      dest: /etc/sysconfig/network-scripts/route-eth5
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: set up route on centralRouter eth6
+    template:
+      src: centralRouter_route_eth6.j2
+      dest: /etc/sysconfig/network-scripts/route-eth6
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: set up route on centralRouter eth2
+    template:
+      src: centralRouter_route_eth2.j2
+      dest: /etc/sysconfig/network-scripts/route-eth2
+      owner: root
+      group: root
+      mode: 0644
+
+
+- hosts: all
+  become: true
+  tasks:
+  - name: reboot
+    reboot:
+      reboot_timeout: 3600
